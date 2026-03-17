@@ -21,9 +21,13 @@ final class RouteLoader extends Loader
 {
     private bool $loaded = false;
 
+    /**
+     * @param list<string> $additionalRoutes
+     */
     public function __construct(
         private bool $httpTransportEnabled,
         private string $httpPath,
+        private array $additionalRoutes = [],
     ) {
         parent::__construct();
     }
@@ -43,6 +47,10 @@ final class RouteLoader extends Loader
         $collection = new RouteCollection();
 
         $collection->add('_mcp_endpoint', new Route($this->httpPath, ['_controller' => 'mcp.server.controller::handle'], methods: [Request::METHOD_GET, Request::METHOD_POST, Request::METHOD_DELETE, Request::METHOD_OPTIONS]));
+
+        foreach ($this->additionalRoutes as $i => $path) {
+            $collection->add('_mcp_route_'.$i, new Route($path, ['_controller' => 'mcp.server.controller::handle'], methods: [Request::METHOD_GET, Request::METHOD_POST, Request::METHOD_OPTIONS]));
+        }
 
         return $collection;
     }
