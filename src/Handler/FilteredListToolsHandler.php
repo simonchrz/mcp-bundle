@@ -74,7 +74,7 @@ final class FilteredListToolsHandler implements RequestHandlerInterface
         $reference = $this->registry->getTool($tool->name);
         $handler = $reference->handler;
 
-        if (!\is_array($handler) || 2 !== \count($handler)) {
+        if (!\is_array($handler)) {
             return true;
         }
 

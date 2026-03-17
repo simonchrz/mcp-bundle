@@ -39,7 +39,7 @@ final class SecurityReferenceHandler implements ReferenceHandlerInterface
     {
         $handler = $reference->handler;
 
-        if (!\is_array($handler) || 2 !== \count($handler)) {
+        if (!\is_array($handler)) {
             return;
         }
 

@@ -121,7 +121,7 @@ final class McpBundle extends AbstractBundle
             ->addTag('mcp.middleware');
 
         $referenceHandler = $config['reference_handler'];
-        if (null === $referenceHandler && $config['http']['oauth']['enabled'] ?? false) {
+        if (null === $referenceHandler && ($config['http']['oauth']['enabled'] ?? false)) {
             $referenceHandler = 'mcp.security_reference_handler';
         }
         if (null !== $referenceHandler) {
@@ -189,8 +189,8 @@ final class McpBundle extends AbstractBundle
     }
 
     /**
-     * @param array{stdio: bool, http: bool}                                                                                                                                           $transports
-     * @param array{path: string, routes: list<string>, metadata_policy: string, session: array{store: string, directory: string, cache_pool: string, prefix: string, ttl: int}} $httpConfig
+     * @param array{stdio: bool, http: bool}                                                                                                                                                                                                                                                                                          $transports
+     * @param array{path: string, routes: list<string>, metadata_policy: string, session: array{store: string, directory: string, cache_pool: string, prefix: string, ttl: int}, middleware: list<string>, oauth: array{enabled: bool, issuer: string, base_url: string, client_id: string, roles_claim: string, metadata_policy: string, security_middleware: string|null, scopes: list<string>}} $httpConfig
      */
     private function configureClient(array $transports, array $httpConfig, ContainerBuilder $container): void
     {
@@ -248,6 +248,14 @@ final class McpBundle extends AbstractBundle
             ])
             ->addTag('routing.loader');
 
+        $container->register(FilteredListToolsHandler::class)
+            ->setArguments([
+                new Reference('mcp.registry'),
+                new Reference('security.authorization_checker'),
+                new Reference('security.token_storage'),
+            ])
+            ->setAutoconfigured(true);
+
         if ($httpConfig['oauth']['enabled']) {
             $this->configureOAuth($httpConfig['oauth'], $container);
         }
@@ -258,6 +266,12 @@ final class McpBundle extends AbstractBundle
      */
     private function configureOAuth(array $oauthConfig, ContainerBuilder $container): void
     {
+        foreach (['issuer', 'base_url', 'client_id'] as $required) {
+            if (null === ($oauthConfig[$required] ?? null) || '' === $oauthConfig[$required]) {
+                throw new \LogicException(\sprintf('The "mcp.http.oauth.%s" option is required when OAuth is enabled.', $required));
+            }
+        }
+
         $policyClass = 'lenient' === $oauthConfig['metadata_policy']
             ? LenientOidcDiscoveryMetadataPolicy::class
             : StrictOidcDiscoveryMetadataPolicy::class;
@@ -266,8 +280,8 @@ final class McpBundle extends AbstractBundle
 
         $container->register('mcp.oauth.discovery', OidcDiscovery::class)
             ->setArguments([
-                null,
-                null,
+                null, // PSR-18 HttpClient, auto-discovered
+                new Reference('mcp.psr17_factory'),
                 new Reference('Psr\SimpleCache\CacheInterface'),
                 3600,
                 new Reference(OidcDiscoveryMetadataPolicyInterface::class),
@@ -276,6 +290,8 @@ final class McpBundle extends AbstractBundle
         $container->register('mcp.oauth.jwks_provider', JwksProvider::class)
             ->setArguments([
                 new Reference('mcp.oauth.discovery'),
+                null, // PSR-18 HttpClient, auto-discovered
+                new Reference('mcp.psr17_factory'),
                 new Reference('Psr\SimpleCache\CacheInterface'),
             ]);
 
@@ -326,14 +342,6 @@ final class McpBundle extends AbstractBundle
             ->setArguments([
                 new Reference('security.token_storage'),
                 $oauthConfig['roles_claim'],
-            ])
-            ->setAutoconfigured(true);
-
-        $container->register(FilteredListToolsHandler::class)
-            ->setArguments([
-                new Reference('mcp.registry'),
-                new Reference('security.authorization_checker'),
-                new Reference('security.token_storage'),
             ])
             ->setAutoconfigured(true);
 
