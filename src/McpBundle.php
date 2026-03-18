@@ -38,7 +38,6 @@ use Symfony\AI\McpBundle\Command\McpCommand;
 use Symfony\AI\McpBundle\Session\FrameworkSessionStore;
 use Symfony\AI\McpBundle\Controller\McpController;
 use Symfony\AI\McpBundle\DependencyInjection\McpPass;
-use Symfony\AI\McpBundle\DependencyInjection\MiddlewarePriorityPass;
 use Symfony\AI\McpBundle\Handler\FilteredListToolsHandler;
 use Symfony\AI\McpBundle\Middleware\SymfonySecurityMiddleware;
 use Symfony\AI\McpBundle\Profiler\DataCollector;
@@ -90,14 +89,6 @@ final class McpBundle extends AbstractBundle
         $oauthEnabled = $config['http']['oauth']['enabled'] ?? false;
         $securityMiddleware = $config['http']['security_middleware'] ?? null;
 
-        $middleware = $config['http']['middleware'];
-        if ([] === $middleware && $oauthEnabled) {
-            $middleware = self::getDefaultOAuthMiddleware($securityMiddleware);
-        } elseif ([] === $middleware && null !== $securityMiddleware) {
-            $middleware = [$securityMiddleware];
-        }
-        $builder->setParameter('mcp.http.middleware', $middleware);
-
         $routes = $config['http']['routes'];
         if ([] === $routes && $oauthEnabled) {
             $routes = self::DEFAULT_OAUTH_ROUTES;
@@ -144,29 +135,13 @@ final class McpBundle extends AbstractBundle
         }
 
         if (isset($config['client_transports'])) {
-            $this->configureClient($config['client_transports'], $config['http'], $builder);
+            $this->configureClient($config['client_transports'], $config['http'], $securityMiddleware, $builder);
         }
     }
 
     public function build(ContainerBuilder $container): void
     {
         $container->addCompilerPass(new McpPass());
-        $container->addCompilerPass(new MiddlewarePriorityPass());
-    }
-
-    /**
-     * @return list<string>
-     */
-    private static function getDefaultOAuthMiddleware(?string $securityMiddleware = null): array
-    {
-        return [
-            ProtectedResourceMetadataMiddleware::class,
-            ClientRegistrationMiddleware::class,
-            OAuthProxyMiddleware::class,
-            AuthorizationMiddleware::class,
-            $securityMiddleware ?? SymfonySecurityMiddleware::class,
-            OAuthRequestMetaMiddleware::class,
-        ];
     }
 
     private function registerMcpAttributes(ContainerBuilder $builder): void
@@ -188,11 +163,7 @@ final class McpBundle extends AbstractBundle
         }
     }
 
-    /**
-     * @param array{stdio: bool, http: bool}                                                                                                                                                                                                                                                                                          $transports
-     * @param array{path: string, routes: list<string>, security_middleware: string|null, session: array{store: string, directory: string, cache_pool: string, prefix: string, ttl: int}, middleware: list<string>, oauth: array{enabled: bool, issuer: string, base_url: string, roles_claim: string, scopes: list<string>}} $httpConfig
-     */
-    private function configureClient(array $transports, array $httpConfig, ContainerBuilder $container): void
+    private function configureClient(array $transports, array $httpConfig, ?string $securityMiddleware, ContainerBuilder $container): void
     {
         if (!$transports['stdio'] && !$transports['http']) {
             return;
@@ -262,14 +233,18 @@ final class McpBundle extends AbstractBundle
         }
 
         if ($httpConfig['oauth']['enabled']) {
-            $this->configureOAuth($httpConfig['oauth'], $httpConfig['path'], $container);
+            $this->configureOAuth($httpConfig['oauth'], $httpConfig['path'], $securityMiddleware, $container);
+        } elseif (null !== $securityMiddleware) {
+            $container->register($securityMiddleware)
+                ->setArguments([new Reference('security.token_storage')])
+                ->addTag('mcp.middleware', ['priority' => 20]);
         }
     }
 
     /**
      * @param array{issuer: ?string, base_url: ?string, roles_claim: string, scopes: list<string>} $oauthConfig
      */
-    private function configureOAuth(array $oauthConfig, string $path, ContainerBuilder $container): void
+    private function configureOAuth(array $oauthConfig, string $path, ?string $securityMiddleware, ContainerBuilder $container): void
     {
         foreach (['issuer', 'base_url'] as $required) {
             if (null === ($oauthConfig[$required] ?? null) || '' === $oauthConfig[$required]) {
@@ -310,7 +285,14 @@ final class McpBundle extends AbstractBundle
 
         $container->register(ProtectedResourceMetadataMiddleware::class)
             ->setArguments([new Reference('mcp.oauth.resource_metadata')])
-            ->setAutoconfigured(true);
+            ->addTag('mcp.middleware', ['priority' => 60]);
+
+        $container->register(ClientRegistrationMiddleware::class)
+            ->setArguments([
+                new Reference(ClientRegistrarInterface::class),
+                $oauthConfig['base_url'],
+            ])
+            ->addTag('mcp.middleware', ['priority' => 50]);
 
         $container->register(OAuthProxyMiddleware::class)
             ->setArguments([
@@ -318,31 +300,25 @@ final class McpBundle extends AbstractBundle
                 $oauthConfig['base_url'],
                 new Reference('mcp.oauth.discovery'),
             ])
-            ->setAutoconfigured(true);
+            ->addTag('mcp.middleware', ['priority' => 40]);
 
         $container->register(AuthorizationMiddleware::class)
             ->setArguments([
                 new Reference('mcp.oauth.token_validator'),
                 new Reference('mcp.oauth.resource_metadata'),
             ])
-            ->setAutoconfigured(true);
+            ->addTag('mcp.middleware', ['priority' => 30]);
 
-        $container->register(OAuthRequestMetaMiddleware::class)
-            ->setAutoconfigured(true);
-
-        $container->register(ClientRegistrationMiddleware::class)
-            ->setArguments([
-                new Reference(ClientRegistrarInterface::class),
-                $oauthConfig['base_url'],
-            ])
-            ->setAutoconfigured(true);
-
-        $container->register(SymfonySecurityMiddleware::class)
+        $securityMiddlewareClass = $securityMiddleware ?? SymfonySecurityMiddleware::class;
+        $container->register($securityMiddlewareClass)
             ->setArguments([
                 new Reference('security.token_storage'),
                 $oauthConfig['roles_claim'],
             ])
-            ->setAutoconfigured(true);
+            ->addTag('mcp.middleware', ['priority' => 20]);
+
+        $container->register(OAuthRequestMetaMiddleware::class)
+            ->addTag('mcp.middleware', ['priority' => 10]);
 
         $container->register('mcp.security_reference_handler', SecurityReferenceHandler::class)
             ->setArguments([
