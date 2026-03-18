@@ -243,7 +243,7 @@ final class McpBundle extends AbstractBundle
 
     private function configureSecurity(?string $securityMiddleware, ContainerBuilder $container): void
     {
-        if (!$container->has('security.authorization_checker')) {
+        if (!$container->hasDefinition('security.authorization_checker') && !$container->hasAlias('security.authorization_checker')) {
             return;
         }
 
