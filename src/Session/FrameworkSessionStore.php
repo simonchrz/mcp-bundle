@@ -1,0 +1,56 @@
+<?php
+
+/*
+ * This file is part of the Symfony package.
+ *
+ * (c) Fabien Potencier <fabien@symfony.com>
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+
+namespace Symfony\AI\McpBundle\Session;
+
+use Mcp\Server\Session\SessionStoreInterface;
+use Symfony\Component\Uid\Uuid;
+
+final class FrameworkSessionStore implements SessionStoreInterface
+{
+    public function __construct(
+        private readonly \SessionHandlerInterface $handler,
+        private readonly string $prefix = 'mcp-',
+    ) {
+    }
+
+    public function exists(Uuid $id): bool
+    {
+        return false !== $this->read($id);
+    }
+
+    public function read(Uuid $id): string|false
+    {
+        $data = $this->handler->read($this->getKey($id));
+
+        return '' === $data ? false : $data;
+    }
+
+    public function write(Uuid $id, string $data): bool
+    {
+        return $this->handler->write($this->getKey($id), $data);
+    }
+
+    public function destroy(Uuid $id): bool
+    {
+        return $this->handler->destroy($this->getKey($id));
+    }
+
+    public function gc(): array
+    {
+        return [];
+    }
+
+    private function getKey(Uuid $id): string
+    {
+        return $this->prefix.$id;
+    }
+}
