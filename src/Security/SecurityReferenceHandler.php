@@ -40,7 +40,7 @@ final class SecurityReferenceHandler implements ReferenceHandlerInterface
         $handler = $reference->handler;
 
         if (!\is_array($handler)) {
-            return;
+            throw new AccessDeniedException(\sprintf('Access denied to tool "%s": unable to resolve handler for authorization check.', $reference->tool->name));
         }
 
         [$class, $method] = $handler;
@@ -48,7 +48,7 @@ final class SecurityReferenceHandler implements ReferenceHandlerInterface
         try {
             $reflection = new \ReflectionMethod($class, $method);
         } catch (\ReflectionException) {
-            return;
+            throw new AccessDeniedException(\sprintf('Access denied to tool "%s": unable to reflect handler for authorization check.', $reference->tool->name));
         }
 
         $attributes = $reflection->getAttributes(IsGranted::class);

@@ -75,7 +75,7 @@ final class FilteredListToolsHandler implements RequestHandlerInterface
         $handler = $reference->handler;
 
         if (!\is_array($handler)) {
-            return true;
+            return false;
         }
 
         [$class, $method] = $handler;
@@ -83,7 +83,7 @@ final class FilteredListToolsHandler implements RequestHandlerInterface
         try {
             $reflection = new \ReflectionMethod($class, $method);
         } catch (\ReflectionException) {
-            return true;
+            return false;
         }
 
         $attributes = $reflection->getAttributes(IsGranted::class);
