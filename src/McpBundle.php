@@ -340,6 +340,8 @@ final class McpBundle extends AbstractBundle
             ->setArguments([
                 new Reference('security.token_storage'),
                 $oauthConfig['roles_claim'],
+                'mcp',
+                new Reference('mcp.psr17_factory'),
             ])
             ->addTag('mcp.middleware', ['priority' => 20]);
 
