@@ -19,23 +19,22 @@ use Mcp\Capability\Attribute\McpTool;
 use Mcp\Capability\Registry\Loader\LoaderInterface;
 use Mcp\Server\Handler\Notification\NotificationHandlerInterface;
 use Mcp\Server\Handler\Request\RequestHandlerInterface;
+use Mcp\Server\Session\FileSessionStore;
+use Mcp\Server\Session\InMemorySessionStore;
+use Mcp\Server\Session\Psr16SessionStore;
 use Mcp\Server\Transport\Http\Middleware\AuthorizationMiddleware;
 use Mcp\Server\Transport\Http\Middleware\ClientRegistrationMiddleware;
 use Mcp\Server\Transport\Http\Middleware\OAuthProxyMiddleware;
 use Mcp\Server\Transport\Http\Middleware\OAuthRequestMetaMiddleware;
 use Mcp\Server\Transport\Http\Middleware\ProtectedResourceMetadataMiddleware;
-use Mcp\Server\Transport\Http\OAuth\ClientRegistrarInterface;
 use Mcp\Server\Transport\Http\OAuth\AuthorizationTokenValidatorInterface;
+use Mcp\Server\Transport\Http\OAuth\ClientRegistrarInterface;
 use Mcp\Server\Transport\Http\OAuth\JwksProvider;
 use Mcp\Server\Transport\Http\OAuth\JwtTokenValidator;
 use Mcp\Server\Transport\Http\OAuth\OidcDiscovery;
 use Mcp\Server\Transport\Http\OAuth\ProtectedResourceMetadata;
 use Psr\Http\Server\MiddlewareInterface;
-use Mcp\Server\Session\FileSessionStore;
-use Mcp\Server\Session\InMemorySessionStore;
-use Mcp\Server\Session\Psr16SessionStore;
 use Symfony\AI\McpBundle\Command\McpCommand;
-use Symfony\AI\McpBundle\Session\FrameworkSessionStore;
 use Symfony\AI\McpBundle\Controller\McpController;
 use Symfony\AI\McpBundle\DependencyInjection\McpPass;
 use Symfony\AI\McpBundle\Handler\FilteredListToolsHandler;
@@ -45,6 +44,7 @@ use Symfony\AI\McpBundle\Profiler\TraceableRegistry;
 use Symfony\AI\McpBundle\Routing\RouteLoader;
 use Symfony\AI\McpBundle\Security\IsGrantedChecker;
 use Symfony\AI\McpBundle\Security\SecurityReferenceHandler;
+use Symfony\AI\McpBundle\Session\FrameworkSessionStore;
 use Symfony\Bridge\PsrHttpMessage\Factory\HttpFoundationFactory;
 use Symfony\Bridge\PsrHttpMessage\Factory\PsrHttpFactory;
 use Symfony\Component\Cache\Psr16Cache;
@@ -79,63 +79,25 @@ final class McpBundle extends AbstractBundle
     {
         $container->import('../config/services.php');
 
-        $builder->setParameter('mcp.app', $config['app']);
-        $builder->setParameter('mcp.version', $config['version']);
-        $builder->setParameter('mcp.description', $config['description']);
-        $builder->setParameter('mcp.website_url', $config['website_url']);
-        $builder->setParameter('mcp.icons', $config['icons']);
-        $builder->setParameter('mcp.pagination_limit', $config['pagination_limit']);
-        $builder->setParameter('mcp.instructions', $config['instructions']);
-        $oauthEnabled = $config['http']['oauth']['enabled'] ?? false;
-        $securityMiddleware = $config['http']['security_middleware'] ?? null;
-
-        $routes = $config['http']['routes'];
-        if ([] === $routes && $oauthEnabled) {
-            $routes = self::DEFAULT_OAUTH_ROUTES;
-        }
-        $builder->setParameter('mcp.http.routes', $routes);
-        $builder->setParameter('mcp.discovery.scan_dirs', $config['discovery']['scan_dirs']);
-        $builder->setParameter('mcp.discovery.exclude_dirs', $config['discovery']['exclude_dirs']);
-
-        $this->registerMcpAttributes($builder);
-
-        $builder->registerForAutoconfiguration(LoaderInterface::class)
-            ->addTag('mcp.loader');
-
-        $builder->registerForAutoconfiguration(RequestHandlerInterface::class)
-            ->addTag('mcp.request_handler');
-
-        $builder->registerForAutoconfiguration(NotificationHandlerInterface::class)
-            ->addTag('mcp.notification_handler');
-
-        $builder->registerForAutoconfiguration(MiddlewareInterface::class)
-            ->addTag('mcp.middleware');
-
-        $referenceHandler = $config['reference_handler'];
-        if (null === $referenceHandler && ($config['http']['oauth']['enabled'] ?? false)) {
-            $referenceHandler = 'mcp.security_reference_handler';
-        }
-        if (null !== $referenceHandler) {
-            $builder->getDefinition('mcp.server.builder')
-                ->addMethodCall('setReferenceHandler', [new Reference($referenceHandler)]);
-        }
-
-        if ($builder->getParameter('kernel.debug')) {
-            $traceableRegistry = (new Definition('mcp.traceable_registry'))
-                ->setClass(TraceableRegistry::class)
-                ->setArguments([new Reference('.inner')])
-                ->setDecoratedService('mcp.registry')
-                ->addTag('kernel.reset', ['method' => 'reset']);
-            $builder->setDefinition('mcp.traceable_registry', $traceableRegistry);
-
-            $dataCollector = (new Definition(DataCollector::class))
-                ->setArguments([new Reference('mcp.traceable_registry')])
-                ->addTag('data_collector', ['id' => 'mcp']);
-            $builder->setDefinition('mcp.data_collector', $dataCollector);
-        }
+        $this->registerParameters($config, $builder);
+        $this->registerAutoconfiguration($builder);
+        $this->configureReferenceHandler($config, $builder);
+        $this->configureDebug($builder);
 
         if (isset($config['client_transports'])) {
-            $this->configureClient($config['client_transports'], $config['http'], $securityMiddleware, $builder);
+            $httpConfig = $config['http'];
+            $securityMiddleware = $httpConfig['security_middleware'] ?? null;
+
+            $this->configureTransports($config['client_transports'], $httpConfig, $builder);
+            $this->configureSecurity($securityMiddleware, $builder);
+
+            if ($httpConfig['oauth']['enabled']) {
+                $this->configureOAuth($httpConfig['oauth'], $httpConfig['path'], $securityMiddleware, $builder);
+            } elseif (null !== $securityMiddleware) {
+                $builder->register($securityMiddleware)
+                    ->setArguments([new Reference('security.token_storage')])
+                    ->addTag('mcp.middleware', ['priority' => 20]);
+            }
         }
     }
 
@@ -144,7 +106,27 @@ final class McpBundle extends AbstractBundle
         $container->addCompilerPass(new McpPass());
     }
 
-    private function registerMcpAttributes(ContainerBuilder $builder): void
+    private function registerParameters(array $config, ContainerBuilder $builder): void
+    {
+        $builder->setParameter('mcp.app', $config['app']);
+        $builder->setParameter('mcp.version', $config['version']);
+        $builder->setParameter('mcp.description', $config['description']);
+        $builder->setParameter('mcp.website_url', $config['website_url']);
+        $builder->setParameter('mcp.icons', $config['icons']);
+        $builder->setParameter('mcp.pagination_limit', $config['pagination_limit']);
+        $builder->setParameter('mcp.instructions', $config['instructions']);
+        $builder->setParameter('mcp.discovery.scan_dirs', $config['discovery']['scan_dirs']);
+        $builder->setParameter('mcp.discovery.exclude_dirs', $config['discovery']['exclude_dirs']);
+
+        $oauthEnabled = $config['http']['oauth']['enabled'] ?? false;
+        $routes = $config['http']['routes'];
+        if ([] === $routes && $oauthEnabled) {
+            $routes = self::DEFAULT_OAUTH_ROUTES;
+        }
+        $builder->setParameter('mcp.http.routes', $routes);
+    }
+
+    private function registerAutoconfiguration(ContainerBuilder $builder): void
     {
         $mcpAttributes = [
             McpTool::class => 'mcp.tool',
@@ -161,17 +143,58 @@ final class McpBundle extends AbstractBundle
                 }
             );
         }
+
+        $builder->registerForAutoconfiguration(LoaderInterface::class)
+            ->addTag('mcp.loader');
+
+        $builder->registerForAutoconfiguration(RequestHandlerInterface::class)
+            ->addTag('mcp.request_handler');
+
+        $builder->registerForAutoconfiguration(NotificationHandlerInterface::class)
+            ->addTag('mcp.notification_handler');
+
+        $builder->registerForAutoconfiguration(MiddlewareInterface::class)
+            ->addTag('mcp.middleware');
     }
 
-    private function configureClient(array $transports, array $httpConfig, ?string $securityMiddleware, ContainerBuilder $container): void
+    private function configureReferenceHandler(array $config, ContainerBuilder $builder): void
+    {
+        $referenceHandler = $config['reference_handler'];
+        if (null === $referenceHandler && ($config['http']['oauth']['enabled'] ?? false)) {
+            $referenceHandler = 'mcp.security_reference_handler';
+        }
+        if (null !== $referenceHandler) {
+            $builder->getDefinition('mcp.server.builder')
+                ->addMethodCall('setReferenceHandler', [new Reference($referenceHandler)]);
+        }
+    }
+
+    private function configureDebug(ContainerBuilder $builder): void
+    {
+        if (!$builder->getParameter('kernel.debug')) {
+            return;
+        }
+
+        $traceableRegistry = (new Definition('mcp.traceable_registry'))
+            ->setClass(TraceableRegistry::class)
+            ->setArguments([new Reference('.inner')])
+            ->setDecoratedService('mcp.registry')
+            ->addTag('kernel.reset', ['method' => 'reset']);
+        $builder->setDefinition('mcp.traceable_registry', $traceableRegistry);
+
+        $dataCollector = (new Definition(DataCollector::class))
+            ->setArguments([new Reference('mcp.traceable_registry')])
+            ->addTag('data_collector', ['id' => 'mcp']);
+        $builder->setDefinition('mcp.data_collector', $dataCollector);
+    }
+
+    private function configureTransports(array $transports, array $httpConfig, ContainerBuilder $container): void
     {
         if (!$transports['stdio'] && !$transports['http']) {
             return;
         }
 
-        // Register PSR factories
         $container->register('mcp.psr17_factory', Psr17Factory::class);
-
         $container->register('mcp.psr_http_factory', PsrHttpFactory::class)
             ->setArguments([
                 new Reference('mcp.psr17_factory'),
@@ -179,10 +202,8 @@ final class McpBundle extends AbstractBundle
                 new Reference('mcp.psr17_factory'),
                 new Reference('mcp.psr17_factory'),
             ]);
-
         $container->register('mcp.http_foundation_factory', HttpFoundationFactory::class);
 
-        // Configure session store based on HTTP config
         $this->configureSessionStore($httpConfig['session'], $container);
 
         if ($transports['stdio']) {
@@ -218,32 +239,26 @@ final class McpBundle extends AbstractBundle
                 '%mcp.http.routes%',
             ])
             ->addTag('routing.loader');
-
-        if ($container->has('security.authorization_checker')) {
-            $container->register('mcp.is_granted_checker', IsGrantedChecker::class)
-                ->setArguments([new Reference('security.authorization_checker')]);
-
-            $container->register(FilteredListToolsHandler::class)
-                ->setArguments([
-                    new Reference('mcp.registry'),
-                    new Reference('mcp.is_granted_checker'),
-                    new Reference('security.token_storage'),
-                ])
-                ->setAutoconfigured(true);
-        }
-
-        if ($httpConfig['oauth']['enabled']) {
-            $this->configureOAuth($httpConfig['oauth'], $httpConfig['path'], $securityMiddleware, $container);
-        } elseif (null !== $securityMiddleware) {
-            $container->register($securityMiddleware)
-                ->setArguments([new Reference('security.token_storage')])
-                ->addTag('mcp.middleware', ['priority' => 20]);
-        }
     }
 
-    /**
-     * @param array{issuer: ?string, base_url: ?string, roles_claim: string, scopes: list<string>} $oauthConfig
-     */
+    private function configureSecurity(?string $securityMiddleware, ContainerBuilder $container): void
+    {
+        if (!$container->has('security.authorization_checker')) {
+            return;
+        }
+
+        $container->register('mcp.is_granted_checker', IsGrantedChecker::class)
+            ->setArguments([new Reference('security.authorization_checker')]);
+
+        $container->register(FilteredListToolsHandler::class)
+            ->setArguments([
+                new Reference('mcp.registry'),
+                new Reference('mcp.is_granted_checker'),
+                new Reference('security.token_storage'),
+            ])
+            ->setAutoconfigured(true);
+    }
+
     private function configureOAuth(array $oauthConfig, string $path, ?string $securityMiddleware, ContainerBuilder $container): void
     {
         foreach (['issuer', 'base_url'] as $required) {
@@ -256,7 +271,7 @@ final class McpBundle extends AbstractBundle
 
         $container->register('mcp.oauth.discovery', OidcDiscovery::class)
             ->setArguments([
-                null, // PSR-18 HttpClient, auto-discovered
+                null,
                 new Reference('mcp.psr17_factory'),
                 new Reference('Psr\SimpleCache\CacheInterface'),
             ]);
@@ -264,7 +279,7 @@ final class McpBundle extends AbstractBundle
         $container->register('mcp.oauth.jwks_provider', JwksProvider::class)
             ->setArguments([
                 new Reference('mcp.oauth.discovery'),
-                null, // PSR-18 HttpClient, auto-discovered
+                null,
                 new Reference('mcp.psr17_factory'),
                 new Reference('Psr\SimpleCache\CacheInterface'),
             ]);
@@ -283,6 +298,17 @@ final class McpBundle extends AbstractBundle
                 $oauthConfig['scopes'],
             ]);
 
+        $this->registerOAuthMiddleware($oauthConfig, $securityMiddleware, $container);
+
+        $container->register('mcp.security_reference_handler', SecurityReferenceHandler::class)
+            ->setArguments([
+                new Reference('mcp.reference_handler'),
+                new Reference('mcp.is_granted_checker'),
+            ]);
+    }
+
+    private function registerOAuthMiddleware(array $oauthConfig, ?string $securityMiddleware, ContainerBuilder $container): void
+    {
         $container->register(ProtectedResourceMetadataMiddleware::class)
             ->setArguments([new Reference('mcp.oauth.resource_metadata')])
             ->addTag('mcp.middleware', ['priority' => 60]);
@@ -319,17 +345,8 @@ final class McpBundle extends AbstractBundle
 
         $container->register(OAuthRequestMetaMiddleware::class)
             ->addTag('mcp.middleware', ['priority' => 10]);
-
-        $container->register('mcp.security_reference_handler', SecurityReferenceHandler::class)
-            ->setArguments([
-                new Reference('mcp.reference_handler'),
-                new Reference('mcp.is_granted_checker'),
-            ]);
     }
 
-    /**
-     * @param array{store: string, directory: string, cache_pool: string, prefix: string, ttl: int} $sessionConfig
-     */
     private function configureSessionStore(array $sessionConfig, ContainerBuilder $container): void
     {
         if ('memory' === $sessionConfig['store']) {
@@ -338,7 +355,6 @@ final class McpBundle extends AbstractBundle
         } elseif ('cache' === $sessionConfig['store']) {
             $cachePoolId = $sessionConfig['cache_pool'];
 
-            // Create the default cache pool as a PSR-16 wrapper around cache.app if it doesn't exist
             if ('cache.mcp.sessions' === $cachePoolId && !$container->hasDefinition($cachePoolId) && !$container->hasAlias($cachePoolId)) {
                 $container->register($cachePoolId, Psr16Cache::class)
                     ->setArguments([new Reference('cache.app')]);
