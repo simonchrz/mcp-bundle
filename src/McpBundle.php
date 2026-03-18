@@ -41,7 +41,6 @@ use Symfony\AI\McpBundle\DependencyInjection\McpPass;
 use Symfony\AI\McpBundle\DependencyInjection\MiddlewarePriorityPass;
 use Symfony\AI\McpBundle\Handler\FilteredListToolsHandler;
 use Symfony\AI\McpBundle\Middleware\SymfonySecurityMiddleware;
-use Symfony\AI\McpBundle\Test\TestSecurityMiddleware;
 use Symfony\AI\McpBundle\Profiler\DataCollector;
 use Symfony\AI\McpBundle\Profiler\TraceableRegistry;
 use Symfony\AI\McpBundle\Routing\RouteLoader;
@@ -87,16 +86,8 @@ final class McpBundle extends AbstractBundle
         $builder->setParameter('mcp.icons', $config['icons']);
         $builder->setParameter('mcp.pagination_limit', $config['pagination_limit']);
         $builder->setParameter('mcp.instructions', $config['instructions']);
-        $isTestEnv = 'test' === $builder->getParameter('kernel.environment');
-        $oauthEnabled = ($config['http']['oauth']['enabled'] ?? false) && !$isTestEnv;
+        $oauthEnabled = $config['http']['oauth']['enabled'] ?? false;
         $securityMiddleware = $config['http']['security_middleware'] ?? null;
-
-        if (null === $securityMiddleware && $isTestEnv && !$oauthEnabled && $builder->has('security.token_storage')) {
-            $securityMiddleware = TestSecurityMiddleware::class;
-            $builder->register(TestSecurityMiddleware::class)
-                ->setArguments([new Reference('security.token_storage')])
-                ->setAutoconfigured(true);
-        }
 
         $middleware = $config['http']['middleware'];
         if ([] === $middleware && $oauthEnabled) {
