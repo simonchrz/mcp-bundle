@@ -197,7 +197,7 @@ final class McpBundle extends AbstractBundle
 
     /**
      * @param array{stdio: bool, http: bool}                                                                                                                                                                                                                                                                                          $transports
-     * @param array{path: string, routes: list<string>, security_middleware: string|null, session: array{store: string, directory: string, cache_pool: string, prefix: string, ttl: int}, middleware: list<string>, oauth: array{enabled: bool, issuer: string, base_url: string, client_id: string, roles_claim: string, scopes: list<string>}} $httpConfig
+     * @param array{path: string, routes: list<string>, security_middleware: string|null, session: array{store: string, directory: string, cache_pool: string, prefix: string, ttl: int}, middleware: list<string>, oauth: array{enabled: bool, issuer: string, base_url: string, roles_claim: string, scopes: list<string>}} $httpConfig
      */
     private function configureClient(array $transports, array $httpConfig, ContainerBuilder $container): void
     {
@@ -264,20 +264,22 @@ final class McpBundle extends AbstractBundle
             ->setAutoconfigured(true);
 
         if ($httpConfig['oauth']['enabled']) {
-            $this->configureOAuth($httpConfig['oauth'], $container);
+            $this->configureOAuth($httpConfig['oauth'], $httpConfig['path'], $container);
         }
     }
 
     /**
-     * @param array{issuer: string, base_url: string, client_id: string, roles_claim: string, scopes: list<string>} $oauthConfig
+     * @param array{issuer: ?string, base_url: ?string, roles_claim: string, scopes: list<string>} $oauthConfig
      */
-    private function configureOAuth(array $oauthConfig, ContainerBuilder $container): void
+    private function configureOAuth(array $oauthConfig, string $path, ContainerBuilder $container): void
     {
-        foreach (['issuer', 'base_url', 'client_id'] as $required) {
+        foreach (['issuer', 'base_url'] as $required) {
             if (null === ($oauthConfig[$required] ?? null) || '' === $oauthConfig[$required]) {
                 throw new \LogicException(\sprintf('The "mcp.http.oauth.%s" option is required when OAuth is enabled.', $required));
             }
         }
+
+        $audience = rtrim($oauthConfig['base_url'], '/').$path;
 
         $container->register('mcp.oauth.discovery', OidcDiscovery::class)
             ->setArguments([
@@ -297,7 +299,7 @@ final class McpBundle extends AbstractBundle
         $container->register('mcp.oauth.token_validator', JwtTokenValidator::class)
             ->setArguments([
                 $oauthConfig['issuer'],
-                $oauthConfig['client_id'],
+                $audience,
                 new Reference('mcp.oauth.jwks_provider'),
             ]);
         $container->setAlias(AuthorizationTokenValidatorInterface::class, 'mcp.oauth.token_validator');

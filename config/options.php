@@ -70,7 +70,6 @@ return static function (DefinitionConfigurator $configurator): void {
                         ->children()
                             ->scalarNode('issuer')->defaultNull()->end()
                             ->scalarNode('base_url')->defaultNull()->end()
-                            ->scalarNode('client_id')->defaultNull()->end()
                             ->scalarNode('roles_claim')->defaultValue('roles')->end()
                             ->arrayNode('scopes')
                                 ->scalarPrototype()->end()
