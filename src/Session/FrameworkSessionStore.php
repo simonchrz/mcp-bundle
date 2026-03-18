@@ -19,7 +19,6 @@ final class FrameworkSessionStore implements SessionStoreInterface
     public function __construct(
         private readonly \SessionHandlerInterface $handler,
         private readonly string $prefix = 'mcp-',
-        private readonly int $ttl = 3600,
     ) {
     }
 
@@ -51,8 +50,9 @@ final class FrameworkSessionStore implements SessionStoreInterface
 
     public function gc(): array
     {
-        $this->handler->gc($this->ttl);
-
+        // Framework session handlers manage their own expiry (Redis TTL, gc_maxlifetime, etc.).
+        // SessionHandlerInterface::gc() returns int|false (count), not the session IDs
+        // required by SessionStoreInterface::gc(), so delegation is not possible.
         return [];
     }
 

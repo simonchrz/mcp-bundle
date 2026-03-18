@@ -99,14 +99,12 @@ final class FrameworkSessionStoreTest extends TestCase
         self::assertFalse($store->exists(Uuid::v4()));
     }
 
-    public function testGcDelegatesToHandlerWithTtl(): void
+    public function testGcReturnsEmptyArray(): void
     {
         $handler = self::createMock(\SessionHandlerInterface::class);
-        $handler->expects(self::once())
-            ->method('gc')
-            ->with(1800);
+        $handler->expects(self::never())->method('gc');
 
-        $store = new FrameworkSessionStore($handler, self::PREFIX, 1800);
+        $store = new FrameworkSessionStore($handler, self::PREFIX);
 
         self::assertSame([], $store->gc());
     }
