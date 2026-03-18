@@ -19,10 +19,9 @@ use Mcp\Schema\Result\ListToolsResult;
 use Mcp\Schema\Tool;
 use Mcp\Server\Handler\Request\RequestHandlerInterface;
 use Mcp\Server\Session\SessionInterface;
+use Symfony\AI\McpBundle\Security\IsGrantedChecker;
 use Symfony\Component\Security\Core\Authentication\Token\NullToken;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
-use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
-use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 /**
  * @implements RequestHandlerInterface<ListToolsResult>
@@ -31,7 +30,7 @@ final class FilteredListToolsHandler implements RequestHandlerInterface
 {
     public function __construct(
         private readonly RegistryInterface $registry,
-        private readonly AuthorizationCheckerInterface $authorizationChecker,
+        private readonly IsGrantedChecker $isGrantedChecker,
         private readonly TokenStorageInterface $tokenStorage,
     ) {
     }
@@ -78,23 +77,7 @@ final class FilteredListToolsHandler implements RequestHandlerInterface
             return false;
         }
 
-        [$class, $method] = $handler;
-
-        try {
-            $reflection = new \ReflectionMethod($class, $method);
-        } catch (\ReflectionException) {
-            return false;
-        }
-
-        $attributes = $reflection->getAttributes(IsGranted::class);
-        foreach ($attributes as $attribute) {
-            $isGranted = $attribute->newInstance();
-            if (!$this->authorizationChecker->isGranted($isGranted->attribute, $isGranted->subject)) {
-                return false;
-            }
-        }
-
-        return true;
+        return $this->isGrantedChecker->isGranted($handler);
     }
 
     private function hasAuthenticatedUser(): bool

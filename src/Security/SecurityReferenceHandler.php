@@ -14,15 +14,13 @@ namespace Symfony\AI\McpBundle\Security;
 use Mcp\Capability\Registry\ElementReference;
 use Mcp\Capability\Registry\ReferenceHandlerInterface;
 use Mcp\Capability\Registry\ToolReference;
-use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 use Symfony\Component\Security\Core\Exception\AccessDeniedException;
-use Symfony\Component\Security\Http\Attribute\IsGranted;
 
 final class SecurityReferenceHandler implements ReferenceHandlerInterface
 {
     public function __construct(
         private readonly ReferenceHandlerInterface $inner,
-        private readonly AuthorizationCheckerInterface $authorizationChecker,
+        private readonly IsGrantedChecker $isGrantedChecker,
     ) {
     }
 
@@ -43,20 +41,8 @@ final class SecurityReferenceHandler implements ReferenceHandlerInterface
             throw new AccessDeniedException(\sprintf('Access denied to tool "%s": unable to resolve handler for authorization check.', $reference->tool->name));
         }
 
-        [$class, $method] = $handler;
-
-        try {
-            $reflection = new \ReflectionMethod($class, $method);
-        } catch (\ReflectionException) {
-            throw new AccessDeniedException(\sprintf('Access denied to tool "%s": unable to reflect handler for authorization check.', $reference->tool->name));
-        }
-
-        $attributes = $reflection->getAttributes(IsGranted::class);
-        foreach ($attributes as $attribute) {
-            $isGranted = $attribute->newInstance();
-            if (!$this->authorizationChecker->isGranted($isGranted->attribute, $isGranted->subject)) {
-                throw new AccessDeniedException(\sprintf('Access denied to tool "%s".', $reference->tool->name));
-            }
+        if (!$this->isGrantedChecker->isGranted($handler)) {
+            throw new AccessDeniedException(\sprintf('Access denied to tool "%s".', $reference->tool->name));
         }
     }
 }

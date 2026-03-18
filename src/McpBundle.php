@@ -44,6 +44,7 @@ use Symfony\AI\McpBundle\Middleware\SymfonySecurityMiddleware;
 use Symfony\AI\McpBundle\Profiler\DataCollector;
 use Symfony\AI\McpBundle\Profiler\TraceableRegistry;
 use Symfony\AI\McpBundle\Routing\RouteLoader;
+use Symfony\AI\McpBundle\Security\IsGrantedChecker;
 use Symfony\AI\McpBundle\Security\SecurityReferenceHandler;
 use Symfony\Bridge\PsrHttpMessage\Factory\HttpFoundationFactory;
 use Symfony\Bridge\PsrHttpMessage\Factory\PsrHttpFactory;
@@ -248,10 +249,13 @@ final class McpBundle extends AbstractBundle
             ->addTag('routing.loader');
 
         if ($container->has('security.authorization_checker')) {
+            $container->register('mcp.is_granted_checker', IsGrantedChecker::class)
+                ->setArguments([new Reference('security.authorization_checker')]);
+
             $container->register(FilteredListToolsHandler::class)
                 ->setArguments([
                     new Reference('mcp.registry'),
-                    new Reference('security.authorization_checker'),
+                    new Reference('mcp.is_granted_checker'),
                     new Reference('security.token_storage'),
                 ])
                 ->setAutoconfigured(true);
@@ -343,7 +347,7 @@ final class McpBundle extends AbstractBundle
         $container->register('mcp.security_reference_handler', SecurityReferenceHandler::class)
             ->setArguments([
                 new Reference('mcp.reference_handler'),
-                new Reference('security.authorization_checker'),
+                new Reference('mcp.is_granted_checker'),
             ]);
     }
 
