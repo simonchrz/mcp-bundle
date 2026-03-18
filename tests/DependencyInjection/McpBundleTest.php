@@ -18,8 +18,6 @@ use Mcp\Capability\Attribute\McpTool;
 use Mcp\Capability\Registry\Loader\LoaderInterface;
 use Mcp\Server\Handler\Notification\NotificationHandlerInterface;
 use Mcp\Server\Handler\Request\RequestHandlerInterface;
-use Mcp\Server\Transport\Http\OAuth\LenientOidcDiscoveryMetadataPolicy;
-use Mcp\Server\Transport\Http\OAuth\StrictOidcDiscoveryMetadataPolicy;
 use Psr\Http\Server\MiddlewareInterface;
 use Mcp\Server\Session\FileSessionStore;
 use Mcp\Server\Session\InMemorySessionStore;
@@ -369,37 +367,6 @@ class McpBundleTest extends TestCase
         $middlewareArgument = $arguments[5];
         $this->assertInstanceOf(TaggedIteratorArgument::class, $middlewareArgument);
         $this->assertSame('mcp.middleware', $middlewareArgument->getTag());
-    }
-
-    public function testMetadataPolicyDefaultsToStrict()
-    {
-        $container = $this->buildContainer([
-            'mcp' => [
-                'client_transports' => [
-                    'http' => true,
-                ],
-            ],
-        ]);
-
-        $definition = $container->getDefinition('mcp.metadata_policy');
-        $this->assertSame(StrictOidcDiscoveryMetadataPolicy::class, $definition->getClass());
-    }
-
-    public function testMetadataPolicyLenient()
-    {
-        $container = $this->buildContainer([
-            'mcp' => [
-                'client_transports' => [
-                    'http' => true,
-                ],
-                'http' => [
-                    'metadata_policy' => 'lenient',
-                ],
-            ],
-        ]);
-
-        $definition = $container->getDefinition('mcp.metadata_policy');
-        $this->assertSame(LenientOidcDiscoveryMetadataPolicy::class, $definition->getClass());
     }
 
     public function testAdditionalRoutesConfiguration()

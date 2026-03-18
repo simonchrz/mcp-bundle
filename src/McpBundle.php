@@ -28,11 +28,8 @@ use Mcp\Server\Transport\Http\OAuth\ClientRegistrarInterface;
 use Mcp\Server\Transport\Http\OAuth\AuthorizationTokenValidatorInterface;
 use Mcp\Server\Transport\Http\OAuth\JwksProvider;
 use Mcp\Server\Transport\Http\OAuth\JwtTokenValidator;
-use Mcp\Server\Transport\Http\OAuth\LenientOidcDiscoveryMetadataPolicy;
 use Mcp\Server\Transport\Http\OAuth\OidcDiscovery;
-use Mcp\Server\Transport\Http\OAuth\OidcDiscoveryMetadataPolicyInterface;
 use Mcp\Server\Transport\Http\OAuth\ProtectedResourceMetadata;
-use Mcp\Server\Transport\Http\OAuth\StrictOidcDiscoveryMetadataPolicy;
 use Psr\Http\Server\MiddlewareInterface;
 use Mcp\Server\Session\FileSessionStore;
 use Mcp\Server\Session\InMemorySessionStore;
@@ -89,12 +86,13 @@ final class McpBundle extends AbstractBundle
         $builder->setParameter('mcp.pagination_limit', $config['pagination_limit']);
         $builder->setParameter('mcp.instructions', $config['instructions']);
         $oauthEnabled = $config['http']['oauth']['enabled'] ?? false;
-
-        $securityMiddleware = $config['http']['oauth']['security_middleware'] ?? null;
+        $securityMiddleware = $config['http']['security_middleware'] ?? null;
 
         $middleware = $config['http']['middleware'];
         if ([] === $middleware && $oauthEnabled) {
             $middleware = self::getDefaultOAuthMiddleware($securityMiddleware);
+        } elseif ([] === $middleware && null !== $securityMiddleware) {
+            $middleware = [$securityMiddleware];
         }
         $builder->setParameter('mcp.http.middleware', $middleware);
 
@@ -190,7 +188,7 @@ final class McpBundle extends AbstractBundle
 
     /**
      * @param array{stdio: bool, http: bool}                                                                                                                                                                                                                                                                                          $transports
-     * @param array{path: string, routes: list<string>, metadata_policy: string, session: array{store: string, directory: string, cache_pool: string, prefix: string, ttl: int}, middleware: list<string>, oauth: array{enabled: bool, issuer: string, base_url: string, client_id: string, roles_claim: string, metadata_policy: string, security_middleware: string|null, scopes: list<string>}} $httpConfig
+     * @param array{path: string, routes: list<string>, security_middleware: string|null, session: array{store: string, directory: string, cache_pool: string, prefix: string, ttl: int}, middleware: list<string>, oauth: array{enabled: bool, issuer: string, base_url: string, client_id: string, roles_claim: string, scopes: list<string>}} $httpConfig
      */
     private function configureClient(array $transports, array $httpConfig, ContainerBuilder $container): void
     {
@@ -262,7 +260,7 @@ final class McpBundle extends AbstractBundle
     }
 
     /**
-     * @param array{issuer: string, base_url: string, client_id: string, roles_claim: string, metadata_policy: string, scopes: list<string>} $oauthConfig
+     * @param array{issuer: string, base_url: string, client_id: string, roles_claim: string, scopes: list<string>} $oauthConfig
      */
     private function configureOAuth(array $oauthConfig, ContainerBuilder $container): void
     {
@@ -272,19 +270,11 @@ final class McpBundle extends AbstractBundle
             }
         }
 
-        $policyClass = 'lenient' === $oauthConfig['metadata_policy']
-            ? LenientOidcDiscoveryMetadataPolicy::class
-            : StrictOidcDiscoveryMetadataPolicy::class;
-        $container->register('mcp.metadata_policy', $policyClass);
-        $container->setAlias(OidcDiscoveryMetadataPolicyInterface::class, 'mcp.metadata_policy');
-
         $container->register('mcp.oauth.discovery', OidcDiscovery::class)
             ->setArguments([
                 null, // PSR-18 HttpClient, auto-discovered
                 new Reference('mcp.psr17_factory'),
                 new Reference('Psr\SimpleCache\CacheInterface'),
-                3600,
-                new Reference(OidcDiscoveryMetadataPolicyInterface::class),
             ]);
 
         $container->register('mcp.oauth.jwks_provider', JwksProvider::class)
