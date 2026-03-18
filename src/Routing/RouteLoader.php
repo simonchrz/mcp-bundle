@@ -48,8 +48,9 @@ final class RouteLoader extends Loader
 
         $collection->add('_mcp_endpoint', new Route($this->httpPath, ['_controller' => 'mcp.server.controller::handle'], methods: [Request::METHOD_GET, Request::METHOD_POST, Request::METHOD_DELETE, Request::METHOD_OPTIONS]));
 
-        foreach ($this->additionalRoutes as $i => $path) {
-            $collection->add('_mcp_route_'.$i, new Route($path, ['_controller' => 'mcp.server.controller::handle'], methods: [Request::METHOD_GET, Request::METHOD_POST, Request::METHOD_OPTIONS]));
+        foreach ($this->additionalRoutes as $path) {
+            $name = '_mcp_'.ltrim(str_replace(['/', '.', '-'], '_', $path), '_');
+            $collection->add($name, new Route($path, ['_controller' => 'mcp.server.controller::handle'], methods: [Request::METHOD_GET, Request::METHOD_POST, Request::METHOD_OPTIONS]));
         }
 
         return $collection;
