@@ -19,12 +19,17 @@ final class FrameworkSessionStore implements SessionStoreInterface
     public function __construct(
         private readonly \SessionHandlerInterface $handler,
         private readonly string $prefix = 'mcp-',
+        private readonly int $ttl = 3600,
     ) {
     }
 
     public function exists(Uuid $id): bool
     {
-        return false !== $this->read($id);
+        if ($this->handler instanceof \SessionUpdateTimestampHandlerInterface) {
+            return $this->handler->validateId($this->getKey($id));
+        }
+
+        return '' !== $this->handler->read($this->getKey($id));
     }
 
     public function read(Uuid $id): string|false
@@ -46,6 +51,8 @@ final class FrameworkSessionStore implements SessionStoreInterface
 
     public function gc(): array
     {
+        $this->handler->gc($this->ttl);
+
         return [];
     }
 
