@@ -11,6 +11,8 @@
 
 namespace Symfony\AI\McpBundle\Middleware;
 
+use Http\Discovery\Psr17FactoryDiscovery;
+use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
@@ -21,11 +23,15 @@ use Symfony\Component\Security\Http\Authenticator\Token\PostAuthenticationToken;
 
 final class SymfonySecurityMiddleware implements MiddlewareInterface
 {
+    private ResponseFactoryInterface $responseFactory;
+
     public function __construct(
         private readonly TokenStorageInterface $tokenStorage,
         private readonly string $rolesClaim = 'roles',
         private readonly string $firewall = 'mcp',
+        ?ResponseFactoryInterface $responseFactory = null,
     ) {
+        $this->responseFactory = $responseFactory ?? Psr17FactoryDiscovery::findResponseFactory();
     }
 
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
@@ -39,7 +45,7 @@ final class SymfonySecurityMiddleware implements MiddlewareInterface
         $email = $claims['email'] ?? null;
 
         if (!\is_string($subject) || '' === $subject || !\is_string($email) || '' === $email) {
-            return $handler->handle($request);
+            return $this->responseFactory->createResponse(401, 'Token missing required claims (sub, email)');
         }
 
         $roles = ['ROLE_MCP_USER'];
