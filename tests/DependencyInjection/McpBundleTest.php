@@ -340,7 +340,7 @@ class McpBundleTest extends TestCase
         $arguments = $routeLoaderDefinition->getArguments();
         $this->assertTrue($arguments[0]); // HTTP transport enabled
         $this->assertSame('/_mcp', $arguments[1]); // Default path
-        $this->assertSame([], $arguments[2]); // Default additional routes
+        $this->assertSame('%mcp.http.routes%', $arguments[2]); // Routes from parameter
 
         // Test session store defaults (file store)
         $this->assertTrue($container->hasDefinition('mcp.session.store'));
@@ -390,9 +390,7 @@ class McpBundleTest extends TestCase
             ],
         ]);
 
-        $routeLoaderDefinition = $container->getDefinition('mcp.server.route_loader');
-        $arguments = $routeLoaderDefinition->getArguments();
-        $this->assertSame($routes, $arguments[2]);
+        $this->assertSame($routes, $container->getParameter('mcp.http.routes'));
     }
 
     public function testHttpConfigurationCustom()

@@ -14,7 +14,7 @@ namespace Symfony\AI\McpBundle\Security;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 use Symfony\Component\Security\Http\Attribute\IsGranted;
 
-final class IsGrantedChecker
+class IsGrantedChecker
 {
     public function __construct(
         private readonly AuthorizationCheckerInterface $authorizationChecker,

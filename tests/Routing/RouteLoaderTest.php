@@ -43,10 +43,18 @@ class RouteLoaderTest extends TestCase
         $this->assertCount(6, $collection);
         $this->assertNotNull($collection->get('_mcp_endpoint'));
 
-        foreach ($additionalRoutes as $i => $path) {
-            $route = $collection->get('_mcp_route_'.$i);
-            $this->assertNotNull($route, \sprintf('Route _mcp_route_%d should exist', $i));
-            $this->assertSame($path, $route->getPath());
+        $expectedNames = [
+            '_mcp_well_known_oauth_protected_resource',
+            '_mcp_well_known_oauth_authorization_server',
+            '_mcp_authorize',
+            '_mcp_token',
+            '_mcp_register',
+        ];
+
+        foreach ($expectedNames as $i => $name) {
+            $route = $collection->get($name);
+            $this->assertNotNull($route, \sprintf('Route %s should exist', $name));
+            $this->assertSame($additionalRoutes[$i], $route->getPath());
             $this->assertSame('mcp.server.controller::handle', $route->getDefault('_controller'));
         }
     }
