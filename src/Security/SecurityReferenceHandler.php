@@ -20,7 +20,7 @@ final class SecurityReferenceHandler implements ReferenceHandlerInterface
 {
     public function __construct(
         private readonly ReferenceHandlerInterface $inner,
-        private readonly IsGrantedChecker $isGrantedChecker,
+        private readonly IsGrantedCheckerInterface $isGrantedChecker,
     ) {
     }
 

@@ -11,7 +11,7 @@ use Mcp\Schema\Tool;
 use Mcp\Server\Session\SessionInterface;
 use PHPUnit\Framework\TestCase;
 use Symfony\AI\McpBundle\Handler\FilteredListToolsHandler;
-use Symfony\AI\McpBundle\Security\IsGrantedChecker;
+use Symfony\AI\McpBundle\Security\IsGrantedCheckerInterface;
 use Symfony\Component\Security\Core\Authentication\Token\NullToken;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Security\Http\Authenticator\Token\PostAuthenticationToken;
@@ -22,7 +22,7 @@ final class FilteredListToolsHandlerTest extends TestCase
     {
         $handler = new FilteredListToolsHandler(
             self::createStub(RegistryInterface::class),
-            self::createStub(IsGrantedChecker::class),
+            self::createStub(IsGrantedCheckerInterface::class),
             self::createStub(TokenStorageInterface::class),
         );
 
@@ -37,7 +37,7 @@ final class FilteredListToolsHandlerTest extends TestCase
         $tokenStorage = self::createStub(TokenStorageInterface::class);
         $tokenStorage->method('getToken')->willReturn(null);
 
-        $handler = new FilteredListToolsHandler($registry, self::createStub(IsGrantedChecker::class), $tokenStorage);
+        $handler = new FilteredListToolsHandler($registry, self::createStub(IsGrantedCheckerInterface::class), $tokenStorage);
         $response = $handler->handle((new ListToolsRequest())->withId('1'), self::createStub(SessionInterface::class));
 
         self::assertInstanceOf(ListToolsResult::class, $response->result);
@@ -52,7 +52,7 @@ final class FilteredListToolsHandlerTest extends TestCase
         $tokenStorage = self::createStub(TokenStorageInterface::class);
         $tokenStorage->method('getToken')->willReturn(new NullToken());
 
-        $handler = new FilteredListToolsHandler($registry, self::createStub(IsGrantedChecker::class), $tokenStorage);
+        $handler = new FilteredListToolsHandler($registry, self::createStub(IsGrantedCheckerInterface::class), $tokenStorage);
         $response = $handler->handle((new ListToolsRequest())->withId('1'), self::createStub(SessionInterface::class));
 
         self::assertCount(0, $response->result->tools);
@@ -76,7 +76,7 @@ final class FilteredListToolsHandlerTest extends TestCase
             }
         );
 
-        $checker = self::createStub(IsGrantedChecker::class);
+        $checker = self::createStub(IsGrantedCheckerInterface::class);
         $checker->method('isGranted')->willReturnCallback(
             static fn (array $handler) => $handler[1] === 'dummyAllowed'
         );
@@ -107,7 +107,7 @@ final class FilteredListToolsHandlerTest extends TestCase
             self::createStub(PostAuthenticationToken::class)
         );
 
-        $handler = new FilteredListToolsHandler($registry, self::createStub(IsGrantedChecker::class), $tokenStorage);
+        $handler = new FilteredListToolsHandler($registry, self::createStub(IsGrantedCheckerInterface::class), $tokenStorage);
         $response = $handler->handle((new ListToolsRequest())->withId('1'), self::createStub(SessionInterface::class));
 
         self::assertCount(0, $response->result->tools);

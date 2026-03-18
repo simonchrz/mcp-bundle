@@ -7,7 +7,7 @@ use Mcp\Capability\Registry\ReferenceHandlerInterface;
 use Mcp\Capability\Registry\ToolReference;
 use Mcp\Schema\Tool;
 use PHPUnit\Framework\TestCase;
-use Symfony\AI\McpBundle\Security\IsGrantedChecker;
+use Symfony\AI\McpBundle\Security\IsGrantedCheckerInterface;
 use Symfony\AI\McpBundle\Security\SecurityReferenceHandler;
 use Symfony\Component\Security\Core\Exception\AccessDeniedException;
 
@@ -22,7 +22,7 @@ final class SecurityReferenceHandlerTest extends TestCase
             ->with($reference, [])
             ->willReturn('result');
 
-        $handler = new SecurityReferenceHandler($inner, self::createStub(IsGrantedChecker::class));
+        $handler = new SecurityReferenceHandler($inner, self::createStub(IsGrantedCheckerInterface::class));
 
         self::assertSame('result', $handler->handle($reference, []));
     }
@@ -32,7 +32,7 @@ final class SecurityReferenceHandlerTest extends TestCase
         $tool = new Tool('my_tool', ['type' => 'object', 'properties' => [], 'required' => null], null, null);
         $reference = new ToolReference($tool, [ToolWithoutAttribute::class, 'handle']);
 
-        $checker = self::createStub(IsGrantedChecker::class);
+        $checker = self::createStub(IsGrantedCheckerInterface::class);
         $checker->method('isGranted')->willReturn(true);
 
         $inner = self::createMock(ReferenceHandlerInterface::class);
@@ -48,7 +48,7 @@ final class SecurityReferenceHandlerTest extends TestCase
         $tool = new Tool('restricted_tool', ['type' => 'object', 'properties' => [], 'required' => null], null, null);
         $reference = new ToolReference($tool, [ToolWithoutAttribute::class, 'handle']);
 
-        $checker = self::createStub(IsGrantedChecker::class);
+        $checker = self::createStub(IsGrantedCheckerInterface::class);
         $checker->method('isGranted')->willReturn(false);
 
         $inner = self::createStub(ReferenceHandlerInterface::class);
@@ -68,7 +68,7 @@ final class SecurityReferenceHandlerTest extends TestCase
 
         $inner = self::createStub(ReferenceHandlerInterface::class);
 
-        $handler = new SecurityReferenceHandler($inner, self::createStub(IsGrantedChecker::class));
+        $handler = new SecurityReferenceHandler($inner, self::createStub(IsGrantedCheckerInterface::class));
 
         $this->expectException(AccessDeniedException::class);
         $this->expectExceptionMessage('unable to resolve handler');
