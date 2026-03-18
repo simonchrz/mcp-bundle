@@ -24,9 +24,11 @@
         "symfony/http-kernel": "^7.3|^8.0",
         "symfony/psr-http-message-bridge": "^7.3|^8.0",
         "symfony/routing": "^7.3|^8.0",
-        "symfony/security-core": "^7.3|^8.0",
-        "symfony/security-http": "^7.3|^8.0",
         "symfony/service-contracts": "^2.5|^3"
+    },
+    "suggest": {
+        "symfony/security-core": "Required for tool authorization via #[IsGranted] attributes",
+        "symfony/security-http": "Required for OAuth middleware and security integration"
     },
     "require-dev": {
         "phpstan/phpstan": "^2.1",

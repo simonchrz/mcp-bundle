@@ -91,7 +91,7 @@ final class McpBundle extends AbstractBundle
         $oauthEnabled = ($config['http']['oauth']['enabled'] ?? false) && !$isTestEnv;
         $securityMiddleware = $config['http']['security_middleware'] ?? null;
 
-        if (null === $securityMiddleware && $isTestEnv && !$oauthEnabled) {
+        if (null === $securityMiddleware && $isTestEnv && !$oauthEnabled && $builder->has('security.token_storage')) {
             $securityMiddleware = TestSecurityMiddleware::class;
             $builder->register(TestSecurityMiddleware::class)
                 ->setArguments([new Reference('security.token_storage')])
@@ -256,13 +256,15 @@ final class McpBundle extends AbstractBundle
             ])
             ->addTag('routing.loader');
 
-        $container->register(FilteredListToolsHandler::class)
-            ->setArguments([
-                new Reference('mcp.registry'),
-                new Reference('security.authorization_checker'),
-                new Reference('security.token_storage'),
-            ])
-            ->setAutoconfigured(true);
+        if ($container->has('security.authorization_checker')) {
+            $container->register(FilteredListToolsHandler::class)
+                ->setArguments([
+                    new Reference('mcp.registry'),
+                    new Reference('security.authorization_checker'),
+                    new Reference('security.token_storage'),
+                ])
+                ->setAutoconfigured(true);
+        }
 
         if ($httpConfig['oauth']['enabled']) {
             $this->configureOAuth($httpConfig['oauth'], $httpConfig['path'], $container);
