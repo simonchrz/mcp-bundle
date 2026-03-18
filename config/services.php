@@ -27,7 +27,6 @@ return static function (ContainerConfigurator $container): void {
         ->alias(RegistryInterface::class, 'mcp.registry')
 
         ->set('mcp.reference_handler', ReferenceHandler::class)
-            ->args([service('service_container')])
 
         ->alias(ReferenceHandler::class, 'mcp.reference_handler')
 
