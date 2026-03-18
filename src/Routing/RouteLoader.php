@@ -46,10 +46,12 @@ final class RouteLoader extends Loader
 
         $collection = new RouteCollection();
 
-        $collection->add('_mcp_endpoint', new Route($this->httpPath, ['_controller' => 'mcp.server.controller::handle'], methods: [Request::METHOD_GET, Request::METHOD_POST, Request::METHOD_DELETE, Request::METHOD_OPTIONS]));
+        $prefix = $this->buildRoutePrefix();
+
+        $collection->add($prefix.'_endpoint', new Route($this->httpPath, ['_controller' => 'mcp.server.controller::handle'], methods: [Request::METHOD_GET, Request::METHOD_POST, Request::METHOD_DELETE, Request::METHOD_OPTIONS]));
 
         foreach ($this->additionalRoutes as $path) {
-            $name = '_mcp_'.ltrim(str_replace(['/', '.', '-'], '_', $path), '_');
+            $name = $prefix.'_'.ltrim(str_replace(['/', '.', '-'], '_', $path), '_');
             $collection->add($name, new Route($path, ['_controller' => 'mcp.server.controller::handle'], methods: [Request::METHOD_GET, Request::METHOD_POST, Request::METHOD_OPTIONS]));
         }
 
@@ -59,5 +61,10 @@ final class RouteLoader extends Loader
     public function supports(mixed $resource, ?string $type = null): bool
     {
         return 'mcp' === $type;
+    }
+
+    private function buildRoutePrefix(): string
+    {
+        return '_mcp_'.substr(hash('xxh3', $this->httpPath), 0, 6);
     }
 }

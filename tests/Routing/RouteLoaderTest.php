@@ -21,10 +21,12 @@ class RouteLoaderTest extends TestCase
     {
         $loader = new RouteLoader(true, '/_mcp');
         $collection = $loader->load(null, 'mcp');
+        $prefix = self::prefix('/_mcp');
 
         $this->assertCount(1, $collection);
-        $this->assertNotNull($collection->get('_mcp_endpoint'));
-        $this->assertSame('/_mcp', $collection->get('_mcp_endpoint')->getPath());
+        $route = $collection->get($prefix.'_endpoint');
+        $this->assertNotNull($route);
+        $this->assertSame('/_mcp', $route->getPath());
     }
 
     public function testAdditionalRoutesRegistered()
@@ -39,24 +41,41 @@ class RouteLoaderTest extends TestCase
 
         $loader = new RouteLoader(true, '/_mcp', $additionalRoutes);
         $collection = $loader->load(null, 'mcp');
+        $prefix = self::prefix('/_mcp');
 
         $this->assertCount(6, $collection);
-        $this->assertNotNull($collection->get('_mcp_endpoint'));
+        $this->assertNotNull($collection->get($prefix.'_endpoint'));
 
-        $expectedNames = [
-            '_mcp_well_known_oauth_protected_resource',
-            '_mcp_well_known_oauth_authorization_server',
-            '_mcp_authorize',
-            '_mcp_token',
-            '_mcp_register',
+        $expectedSuffixes = [
+            'well_known_oauth_protected_resource',
+            'well_known_oauth_authorization_server',
+            'authorize',
+            'token',
+            'register',
         ];
 
-        foreach ($expectedNames as $i => $name) {
+        foreach ($expectedSuffixes as $i => $suffix) {
+            $name = $prefix.'_'.$suffix;
             $route = $collection->get($name);
             $this->assertNotNull($route, \sprintf('Route %s should exist', $name));
             $this->assertSame($additionalRoutes[$i], $route->getPath());
             $this->assertSame('mcp.server.controller::handle', $route->getDefault('_controller'));
         }
+    }
+
+    public function testDifferentPathsProduceUniqueRouteNames()
+    {
+        $loader1 = new RouteLoader(true, '/mcp');
+        $loader2 = new RouteLoader(true, '/api/mcp');
+
+        $collection1 = $loader1->load(null, 'mcp');
+        $names1 = array_keys($collection1->all());
+
+        // Reset loaded state via new instance
+        $collection2 = $loader2->load(null, 'mcp');
+        $names2 = array_keys($collection2->all());
+
+        $this->assertNotSame($names1[0], $names2[0]);
     }
 
     public function testHttpDisabledReturnsEmptyCollection()
@@ -82,5 +101,10 @@ class RouteLoaderTest extends TestCase
 
         $this->assertTrue($loader->supports(null, 'mcp'));
         $this->assertFalse($loader->supports(null, 'other'));
+    }
+
+    private static function prefix(string $path): string
+    {
+        return '_mcp_'.substr(hash('xxh3', $path), 0, 6);
     }
 }
