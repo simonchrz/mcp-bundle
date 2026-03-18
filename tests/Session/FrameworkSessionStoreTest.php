@@ -19,17 +19,12 @@ final class FrameworkSessionStoreTest extends TestCase
 {
     private const PREFIX = 'mcp-';
 
-    public function testReadReturnsDataFromHandler(): void
+    public function testWriteAndReadRoundTrip(): void
     {
         $id = Uuid::v4();
-        $handler = self::createMock(\SessionHandlerInterface::class);
-        $handler->expects(self::once())
-            ->method('read')
-            ->with(self::PREFIX.$id)
-            ->willReturn('session-data');
+        $store = new FrameworkSessionStore($this->createInMemoryHandler(), self::PREFIX);
 
-        $store = new FrameworkSessionStore($handler, self::PREFIX);
-
+        self::assertTrue($store->write($id, 'session-data'));
         self::assertSame('session-data', $store->read($id));
     }
 
@@ -43,18 +38,28 @@ final class FrameworkSessionStoreTest extends TestCase
         self::assertFalse($store->read(Uuid::v4()));
     }
 
-    public function testWriteDelegatesToHandler(): void
+    public function testReadReturnsFalseForInvalidEnvelope(): void
     {
-        $id = Uuid::v4();
-        $handler = self::createMock(\SessionHandlerInterface::class);
-        $handler->expects(self::once())
-            ->method('write')
-            ->with(self::PREFIX.$id, 'data')
-            ->willReturn(true);
+        $handler = self::createStub(\SessionHandlerInterface::class);
+        $handler->method('read')->willReturn('not-json');
 
         $store = new FrameworkSessionStore($handler, self::PREFIX);
 
-        self::assertTrue($store->write($id, 'data'));
+        self::assertFalse($store->read(Uuid::v4()));
+    }
+
+    public function testReadReturnsFalseAndDestroysExpiredSession(): void
+    {
+        $id = Uuid::v4();
+        $expired = json_encode(['d' => 'old-data', 'e' => time() - 1]);
+
+        $handler = self::createMock(\SessionHandlerInterface::class);
+        $handler->method('read')->willReturn($expired);
+        $handler->expects(self::once())->method('destroy')->with(self::PREFIX.$id);
+
+        $store = new FrameworkSessionStore($handler, self::PREFIX);
+
+        self::assertFalse($store->read($id));
     }
 
     public function testDestroyDelegatesToHandler(): void
@@ -71,37 +76,34 @@ final class FrameworkSessionStoreTest extends TestCase
         self::assertTrue($store->destroy($id));
     }
 
-    public function testExistsUsesValidateIdWhenAvailable(): void
+    public function testExistsReturnsTrueForValidSession(): void
     {
-        $id = Uuid::v4();
-        $handler = self::createMock(SessionHandlerWithTimestamp::class);
-        $handler->expects(self::once())
-            ->method('validateId')
-            ->with(self::PREFIX.$id)
-            ->willReturn(true);
-        $handler->expects(self::never())->method('read');
+        $envelope = json_encode(['d' => 'data', 'e' => time() + 3600]);
 
-        $store = new FrameworkSessionStore($handler, self::PREFIX);
-
-        self::assertTrue($store->exists($id));
-    }
-
-    public function testExistsFallsBackToReadWithoutValidateId(): void
-    {
-        $handler = self::createMock(\SessionHandlerInterface::class);
-        $handler->expects(self::once())
-            ->method('read')
-            ->willReturn('data');
+        $handler = self::createStub(\SessionHandlerInterface::class);
+        $handler->method('read')->willReturn($envelope);
 
         $store = new FrameworkSessionStore($handler, self::PREFIX);
 
         self::assertTrue($store->exists(Uuid::v4()));
     }
 
-    public function testExistsReturnsFalseForEmptyRead(): void
+    public function testExistsReturnsFalseForMissingSession(): void
     {
         $handler = self::createStub(\SessionHandlerInterface::class);
         $handler->method('read')->willReturn('');
+
+        $store = new FrameworkSessionStore($handler, self::PREFIX);
+
+        self::assertFalse($store->exists(Uuid::v4()));
+    }
+
+    public function testExistsReturnsFalseForExpiredSession(): void
+    {
+        $expired = json_encode(['d' => 'data', 'e' => time() - 1]);
+
+        $handler = self::createStub(\SessionHandlerInterface::class);
+        $handler->method('read')->willReturn($expired);
 
         $store = new FrameworkSessionStore($handler, self::PREFIX);
 
@@ -121,18 +123,76 @@ final class FrameworkSessionStoreTest extends TestCase
     public function testCustomPrefix(): void
     {
         $id = Uuid::v4();
+        $envelope = json_encode(['d' => 'data', 'e' => time() + 3600]);
+
         $handler = self::createMock(\SessionHandlerInterface::class);
         $handler->expects(self::once())
             ->method('read')
             ->with('custom_'.$id)
-            ->willReturn('data');
+            ->willReturn($envelope);
 
         $store = new FrameworkSessionStore($handler, 'custom_');
 
         self::assertSame('data', $store->read($id));
     }
-}
 
-abstract class SessionHandlerWithTimestamp implements \SessionHandlerInterface, \SessionUpdateTimestampHandlerInterface
-{
+    public function testTtlIsRespected(): void
+    {
+        $id = Uuid::v4();
+
+        $handler = self::createMock(\SessionHandlerInterface::class);
+        $handler->expects(self::once())
+            ->method('write')
+            ->with(self::PREFIX.$id, self::callback(static function (string $raw): bool {
+                $envelope = json_decode($raw, true);
+
+                return \is_array($envelope) && $envelope['e'] <= time() + 60;
+            }))
+            ->willReturn(true);
+
+        $store = new FrameworkSessionStore($handler, self::PREFIX, 60);
+
+        $store->write($id, 'data');
+    }
+
+    private function createInMemoryHandler(): \SessionHandlerInterface
+    {
+        return new class implements \SessionHandlerInterface {
+            private array $data = [];
+
+            public function open(string $path, string $name): bool
+            {
+                return true;
+            }
+
+            public function close(): bool
+            {
+                return true;
+            }
+
+            public function read(string $id): string
+            {
+                return $this->data[$id] ?? '';
+            }
+
+            public function write(string $id, string $data): bool
+            {
+                $this->data[$id] = $data;
+
+                return true;
+            }
+
+            public function destroy(string $id): bool
+            {
+                unset($this->data[$id]);
+
+                return true;
+            }
+
+            public function gc(int $max_lifetime): int
+            {
+                return 0;
+            }
+        };
+    }
 }

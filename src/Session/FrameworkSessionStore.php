@@ -19,28 +19,41 @@ final class FrameworkSessionStore implements SessionStoreInterface
     public function __construct(
         private readonly \SessionHandlerInterface $handler,
         private readonly string $prefix = 'mcp-',
+        private readonly int $ttl = 3600,
     ) {
     }
 
     public function exists(Uuid $id): bool
     {
-        if ($this->handler instanceof \SessionUpdateTimestampHandlerInterface) {
-            return $this->handler->validateId($this->getKey($id));
-        }
-
-        return '' !== $this->handler->read($this->getKey($id));
+        return false !== $this->read($id);
     }
 
     public function read(Uuid $id): string|false
     {
-        $data = $this->handler->read($this->getKey($id));
+        $raw = $this->handler->read($this->getKey($id));
+        if ('' === $raw) {
+            return false;
+        }
 
-        return '' === $data ? false : $data;
+        $envelope = json_decode($raw, true);
+        if (!\is_array($envelope) || !isset($envelope['d'], $envelope['e'])) {
+            return false;
+        }
+
+        if ($envelope['e'] < time()) {
+            $this->destroy($id);
+
+            return false;
+        }
+
+        return $envelope['d'];
     }
 
     public function write(Uuid $id, string $data): bool
     {
-        return $this->handler->write($this->getKey($id), $data);
+        $envelope = json_encode(['d' => $data, 'e' => time() + $this->ttl], \JSON_THROW_ON_ERROR);
+
+        return $this->handler->write($this->getKey($id), $envelope);
     }
 
     public function destroy(Uuid $id): bool
@@ -50,9 +63,10 @@ final class FrameworkSessionStore implements SessionStoreInterface
 
     public function gc(): array
     {
-        // Framework session handlers manage their own expiry (Redis TTL, gc_maxlifetime, etc.).
-        // SessionHandlerInterface::gc() returns int|false (count), not the session IDs
-        // required by SessionStoreInterface::gc(), so delegation is not possible.
+        // Expiry is handled lazily on read() — expired sessions are destroyed
+        // when accessed. We cannot call SessionHandlerInterface::gc() because
+        // it would affect all sessions (including framework HTTP sessions)
+        // and returns int|false, not the Uuid[] required by this interface.
         return [];
     }
 

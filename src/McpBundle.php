@@ -373,6 +373,7 @@ final class McpBundle extends AbstractBundle
                 ->setArguments([
                     new Reference('session.handler'),
                     $sessionConfig['prefix'],
+                    $sessionConfig['ttl'],
                 ]);
         } else {
             $container->register('mcp.session.store', FileSessionStore::class)
