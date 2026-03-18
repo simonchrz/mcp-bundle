@@ -22,7 +22,7 @@ final class IsGrantedChecker implements IsGrantedCheckerInterface
     }
 
     /**
-     * @param array{string, string} $handler
+     * @param array{class-string, string} $handler
      */
     public function isGranted(array $handler): bool
     {

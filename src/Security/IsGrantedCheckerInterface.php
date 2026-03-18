@@ -14,7 +14,7 @@ namespace Symfony\AI\McpBundle\Security;
 interface IsGrantedCheckerInterface
 {
     /**
-     * @param array{string, string} $handler
+     * @param array{class-string, string} $handler
      */
     public function isGranted(array $handler): bool;
 }
