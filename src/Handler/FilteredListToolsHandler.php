@@ -47,12 +47,7 @@ final class FilteredListToolsHandler implements RequestHandlerInterface
         $allTools = $this->registry->getTools();
 
         if (!$this->hasAuthenticatedUser()) {
-            $tools = array_values(array_filter(
-                $allTools->references,
-                fn (mixed $item) => $item instanceof Tool,
-            ));
-
-            return new Response($request->getId(), new ListToolsResult($tools));
+            return new Response($request->getId(), new ListToolsResult([]));
         }
 
         $filtered = [];

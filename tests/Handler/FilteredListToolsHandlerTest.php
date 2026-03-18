@@ -29,13 +29,10 @@ final class FilteredListToolsHandlerTest extends TestCase
         self::assertTrue($handler->supports((new ListToolsRequest())->withId('1')));
     }
 
-    public function testReturnsAllToolsWithoutAuthentication(): void
+    public function testReturnsEmptyListWithoutAuthentication(): void
     {
-        $tool1 = new Tool('tool_a', ['type' => 'object', 'properties' => [], 'required' => null], null, null);
-        $tool2 = new Tool('tool_b', ['type' => 'object', 'properties' => [], 'required' => null], null, null);
-
         $registry = self::createStub(RegistryInterface::class);
-        $registry->method('getTools')->willReturn(new Page([$tool1, $tool2], null));
+        $registry->method('getTools')->willReturn(new Page([], null));
 
         $tokenStorage = self::createStub(TokenStorageInterface::class);
         $tokenStorage->method('getToken')->willReturn(null);
@@ -43,17 +40,14 @@ final class FilteredListToolsHandlerTest extends TestCase
         $handler = new FilteredListToolsHandler($registry, self::createStub(IsGrantedChecker::class), $tokenStorage);
         $response = $handler->handle((new ListToolsRequest())->withId('1'), self::createStub(SessionInterface::class));
 
-        $result = $response->result;
-        self::assertInstanceOf(ListToolsResult::class, $result);
-        self::assertCount(2, $result->tools);
+        self::assertInstanceOf(ListToolsResult::class, $response->result);
+        self::assertCount(0, $response->result->tools);
     }
 
-    public function testReturnsAllToolsWithNullToken(): void
+    public function testReturnsEmptyListWithNullToken(): void
     {
-        $tool = new Tool('tool_a', ['type' => 'object', 'properties' => [], 'required' => null], null, null);
-
         $registry = self::createStub(RegistryInterface::class);
-        $registry->method('getTools')->willReturn(new Page([$tool], null));
+        $registry->method('getTools')->willReturn(new Page([], null));
 
         $tokenStorage = self::createStub(TokenStorageInterface::class);
         $tokenStorage->method('getToken')->willReturn(new NullToken());
@@ -61,7 +55,7 @@ final class FilteredListToolsHandlerTest extends TestCase
         $handler = new FilteredListToolsHandler($registry, self::createStub(IsGrantedChecker::class), $tokenStorage);
         $response = $handler->handle((new ListToolsRequest())->withId('1'), self::createStub(SessionInterface::class));
 
-        self::assertCount(1, $response->result->tools);
+        self::assertCount(0, $response->result->tools);
     }
 
     public function testFiltersToolsByAuthorizationWhenAuthenticated(): void
