@@ -300,6 +300,11 @@ final class McpBundle extends AbstractBundle
 
         $this->registerOAuthMiddleware($oauthConfig, $securityMiddleware, $container);
 
+        if (!$container->hasDefinition('mcp.is_granted_checker')) {
+            $container->register('mcp.is_granted_checker', IsGrantedChecker::class)
+                ->setArguments([new Reference('security.authorization_checker')]);
+        }
+
         $container->register('mcp.security_reference_handler', SecurityReferenceHandler::class)
             ->setArguments([
                 new Reference('mcp.reference_handler'),
