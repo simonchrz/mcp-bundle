@@ -243,20 +243,6 @@ final class McpBundle extends AbstractBundle
 
     private function configureSecurity(?string $securityMiddleware, ContainerBuilder $container): void
     {
-        if (!$container->hasDefinition('security.authorization_checker') && !$container->hasAlias('security.authorization_checker')) {
-            return;
-        }
-
-        $container->register('mcp.is_granted_checker', IsGrantedChecker::class)
-            ->setArguments([new Reference('security.authorization_checker')]);
-
-        $container->register(FilteredListToolsHandler::class)
-            ->setArguments([
-                new Reference('mcp.registry'),
-                new Reference('mcp.is_granted_checker'),
-                new Reference('security.token_storage'),
-            ])
-            ->setAutoconfigured(true);
     }
 
     private function configureOAuth(array $oauthConfig, string $path, ?string $securityMiddleware, ContainerBuilder $container): void
