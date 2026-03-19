@@ -356,10 +356,16 @@ final class McpBundle extends AbstractBundle
 
     private function configureSessionStore(array $sessionConfig, ContainerBuilder $container): void
     {
-        if ('memory' === $sessionConfig['store']) {
+        $store = $sessionConfig['store'];
+
+        if ('framework' === $store && 'test' === $container->getParameter('kernel.environment')) {
+            $store = 'file';
+        }
+
+        if ('memory' === $store) {
             $container->register('mcp.session.store', InMemorySessionStore::class)
                 ->setArguments([$sessionConfig['ttl']]);
-        } elseif ('cache' === $sessionConfig['store']) {
+        } elseif ('cache' === $store) {
             $cachePoolId = $sessionConfig['cache_pool'];
 
             if ('cache.mcp.sessions' === $cachePoolId && !$container->hasDefinition($cachePoolId) && !$container->hasAlias($cachePoolId)) {
@@ -373,7 +379,7 @@ final class McpBundle extends AbstractBundle
                     $sessionConfig['prefix'],
                     $sessionConfig['ttl'],
                 ]);
-        } elseif ('framework' === $sessionConfig['store']) {
+        } elseif ('framework' === $store) {
             $container->register('mcp.session.store', FrameworkSessionStore::class)
                 ->setArguments([
                     new Reference('session.handler'),
