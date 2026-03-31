@@ -24,6 +24,7 @@ use Mcp\Server\Session\InMemorySessionStore;
 use Mcp\Server\Session\Psr16SessionStore;
 use Psr\Http\Server\MiddlewareInterface;
 use Symfony\AI\McpBundle\Command\McpCommand;
+use Symfony\AI\McpBundle\Session\FrameworkSessionStore;
 use Symfony\AI\McpBundle\Controller\McpController;
 use Symfony\AI\McpBundle\DependencyInjection\McpPass;
 use Symfony\AI\McpBundle\Profiler\DataCollector;
@@ -202,6 +203,13 @@ final class McpBundle extends AbstractBundle
             $container->register('mcp.session.store', Psr16SessionStore::class)
                 ->setArguments([
                     new Reference($sessionConfig['cache_pool']),
+                    $sessionConfig['prefix'],
+                    $sessionConfig['ttl'],
+                ]);
+        } elseif ('framework' === $sessionConfig['store']) {
+            $container->register('mcp.session.store', FrameworkSessionStore::class)
+                ->setArguments([
+                    new Reference('session.handler'),
                     $sessionConfig['prefix'],
                     $sessionConfig['ttl'],
                 ]);
