@@ -24,12 +24,14 @@ use Mcp\Server\Session\InMemorySessionStore;
 use Mcp\Server\Session\Psr16SessionStore;
 use Psr\Http\Server\MiddlewareInterface;
 use Symfony\AI\McpBundle\Command\McpCommand;
-use Symfony\AI\McpBundle\Session\FrameworkSessionStore;
 use Symfony\AI\McpBundle\Controller\McpController;
 use Symfony\AI\McpBundle\DependencyInjection\McpPass;
+use Symfony\AI\McpBundle\Handler\FilteredListToolsHandler;
 use Symfony\AI\McpBundle\Profiler\DataCollector;
 use Symfony\AI\McpBundle\Profiler\TraceableRegistry;
 use Symfony\AI\McpBundle\Routing\RouteLoader;
+use Symfony\AI\McpBundle\Security\IsGrantedChecker;
+use Symfony\AI\McpBundle\Session\FrameworkSessionStore;
 use Symfony\Bridge\PsrHttpMessage\Factory\HttpFoundationFactory;
 use Symfony\Bridge\PsrHttpMessage\Factory\PsrHttpFactory;
 use Symfony\Component\Cache\Psr16Cache;
@@ -97,6 +99,8 @@ final class McpBundle extends AbstractBundle
         if (isset($config['client_transports'])) {
             $this->configureClient($config['client_transports'], $config['http'], $builder);
         }
+
+        $this->configureSecurity($builder);
     }
 
     public function build(ContainerBuilder $container): void
@@ -218,5 +222,23 @@ final class McpBundle extends AbstractBundle
             $container->register('mcp.session.store', FileSessionStore::class)
                 ->setArguments([$sessionConfig['directory'], $sessionConfig['ttl']]);
         }
+    }
+
+    private function configureSecurity(ContainerBuilder $container): void
+    {
+        if (!$container->hasDefinition('security.authorization_checker') && !$container->hasAlias('security.authorization_checker')) {
+            return;
+        }
+
+        $container->register('mcp.is_granted_checker', IsGrantedChecker::class)
+            ->setArguments([new Reference('security.authorization_checker')]);
+
+        $container->register(FilteredListToolsHandler::class)
+            ->setArguments([
+                new Reference('mcp.registry'),
+                new Reference('mcp.is_granted_checker'),
+                new Reference('security.token_storage'),
+            ])
+            ->setAutoconfigured(true);
     }
 }
