@@ -11,10 +11,13 @@
 
 namespace Symfony\AI\McpBundle\DependencyInjection;
 
+use Symfony\AI\McpBundle\Handler\FilteredListToolsHandler;
+use Symfony\AI\McpBundle\Security\IsGrantedChecker;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\Compiler\PriorityTaggedServiceTrait;
 use Symfony\Component\DependencyInjection\Compiler\ServiceLocatorTagPass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Reference;
 
 final class McpPass implements CompilerPassInterface
@@ -46,5 +49,26 @@ final class McpPass implements CompilerPassInterface
 
         $serviceLocatorRef = ServiceLocatorTagPass::register($container, $serviceReferences);
         $container->getDefinition('mcp.server.builder')->addMethodCall('setContainer', [$serviceLocatorRef]);
+
+        $this->configureSecurity($container);
+    }
+
+    private function configureSecurity(ContainerBuilder $container): void
+    {
+        if (!$container->hasDefinition('security.authorization_checker') && !$container->hasAlias('security.authorization_checker')) {
+            return;
+        }
+
+        $container->setDefinition('mcp.is_granted_checker', (new Definition(IsGrantedChecker::class))
+            ->setArguments([new Reference('security.authorization_checker')]));
+
+        $container->setDefinition(FilteredListToolsHandler::class, (new Definition(FilteredListToolsHandler::class))
+            ->setArguments([
+                new Reference('mcp.registry'),
+                new Reference('mcp.is_granted_checker'),
+                new Reference('security.token_storage'),
+            ])
+            ->setAutoconfigured(true)
+            ->addTag('mcp.request_handler'));
     }
 }
