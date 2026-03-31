@@ -55,6 +55,10 @@ final class McpPass implements CompilerPassInterface
 
     private function configureSecurity(ContainerBuilder $container): void
     {
+        if ($container->hasParameter('mcp.security.enabled') && false === $container->getParameter('mcp.security.enabled')) {
+            return;
+        }
+
         if (!$container->hasDefinition('security.authorization_checker') && !$container->hasAlias('security.authorization_checker')) {
             return;
         }
