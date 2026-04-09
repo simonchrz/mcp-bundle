@@ -38,7 +38,7 @@ final class SecurityReferenceHandler implements ReferenceHandlerInterface
         $handler = $reference->handler;
 
         if (!\is_array($handler)) {
-            throw new AccessDeniedException(\sprintf('Access denied to tool "%s": unable to resolve handler for authorization check.', $reference->tool->name));
+            return;
         }
 
         if (!$this->isGrantedChecker->isGranted($handler)) {

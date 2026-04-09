@@ -70,7 +70,6 @@ final class McpPass implements CompilerPassInterface
             ->setArguments([
                 new Reference('mcp.registry'),
                 new Reference('mcp.is_granted_checker'),
-                new Reference('security.token_storage'),
             ])
             ->setAutoconfigured(true)
             ->addTag('mcp.request_handler'));

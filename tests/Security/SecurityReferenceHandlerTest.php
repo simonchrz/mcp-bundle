@@ -70,18 +70,16 @@ final class SecurityReferenceHandlerTest extends TestCase
         $handler->handle($reference, []);
     }
 
-    public function testDeniesToolWithNonArrayHandler()
+    public function testAllowsToolWithNonArrayHandler(): void
     {
         $tool = new Tool('closure_tool', ['type' => 'object', 'properties' => [], 'required' => null], null, null);
         $reference = new ToolReference($tool, static fn () => null);
 
-        $inner = $this->createStub(ReferenceHandlerInterface::class);
+        $inner = self::createMock(ReferenceHandlerInterface::class);
+        $inner->expects($this->once())->method('handle')->willReturn('ok');
 
         $handler = new SecurityReferenceHandler($inner, $this->createStub(IsGrantedCheckerInterface::class));
 
-        $this->expectException(AccessDeniedException::class);
-        $this->expectExceptionMessage('unable to resolve handler');
-
-        $handler->handle($reference, []);
+        $this->assertSame('ok', $handler->handle($reference, []));
     }
 }

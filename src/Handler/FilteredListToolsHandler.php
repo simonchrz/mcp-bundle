@@ -20,8 +20,6 @@ use Mcp\Schema\Tool;
 use Mcp\Server\Handler\Request\RequestHandlerInterface;
 use Mcp\Server\Session\SessionInterface;
 use Symfony\AI\McpBundle\Security\IsGrantedCheckerInterface;
-use Symfony\Component\Security\Core\Authentication\Token\NullToken;
-use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 
 /**
  * @implements RequestHandlerInterface<ListToolsResult>
@@ -31,7 +29,6 @@ final class FilteredListToolsHandler implements RequestHandlerInterface
     public function __construct(
         private readonly RegistryInterface $registry,
         private readonly IsGrantedCheckerInterface $isGrantedChecker,
-        private readonly TokenStorageInterface $tokenStorage,
     ) {
     }
 
@@ -45,10 +42,6 @@ final class FilteredListToolsHandler implements RequestHandlerInterface
         \assert($request instanceof ListToolsRequest);
 
         $allTools = $this->registry->getTools();
-
-        if (!$this->hasAuthenticatedUser()) {
-            return new Response($request->getId(), new ListToolsResult([]));
-        }
 
         $filtered = [];
         foreach ($allTools->references as $item) {
@@ -69,16 +62,9 @@ final class FilteredListToolsHandler implements RequestHandlerInterface
         $handler = $reference->handler;
 
         if (!\is_array($handler)) {
-            return false;
+            return true;
         }
 
         return $this->isGrantedChecker->isGranted($handler);
-    }
-
-    private function hasAuthenticatedUser(): bool
-    {
-        $token = $this->tokenStorage->getToken();
-
-        return null !== $token && !$token instanceof NullToken;
     }
 }

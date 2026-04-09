@@ -21,53 +21,58 @@ use Mcp\Server\Session\SessionInterface;
 use PHPUnit\Framework\TestCase;
 use Symfony\AI\McpBundle\Handler\FilteredListToolsHandler;
 use Symfony\AI\McpBundle\Security\IsGrantedCheckerInterface;
-use Symfony\Component\Security\Core\Authentication\Token\NullToken;
-use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
-use Symfony\Component\Security\Http\Authenticator\Token\PostAuthenticationToken;
 
 final class FilteredListToolsHandlerTest extends TestCase
 {
-    public function testSupportsListToolsRequest()
+    public function testSupportsListToolsRequest(): void
     {
         $handler = new FilteredListToolsHandler(
             $this->createStub(RegistryInterface::class),
             $this->createStub(IsGrantedCheckerInterface::class),
-            $this->createStub(TokenStorageInterface::class),
         );
 
         $this->assertTrue($handler->supports((new ListToolsRequest())->withId('1')));
     }
 
-    public function testReturnsEmptyListWithoutAuthentication()
+    public function testPublicToolsVisibleWithoutAuthentication(): void
     {
+        $tool = new Tool('public_tool', ['type' => 'object', 'properties' => [], 'required' => null], null, null);
+        $ref = new ToolReference($tool, [self::class, 'dummyAllowed']);
+
         $registry = $this->createStub(RegistryInterface::class);
-        $registry->method('getTools')->willReturn(new Page([], null));
+        $registry->method('getTools')->willReturn(new Page([$tool], null));
+        $registry->method('getTool')->willReturn($ref);
 
-        $tokenStorage = $this->createStub(TokenStorageInterface::class);
-        $tokenStorage->method('getToken')->willReturn(null);
+        $checker = $this->createStub(IsGrantedCheckerInterface::class);
+        $checker->method('isGranted')->willReturn(true);
 
-        $handler = new FilteredListToolsHandler($registry, $this->createStub(IsGrantedCheckerInterface::class), $tokenStorage);
+        $handler = new FilteredListToolsHandler($registry, $checker);
         $response = $handler->handle((new ListToolsRequest())->withId('1'), $this->createStub(SessionInterface::class));
 
         $this->assertInstanceOf(ListToolsResult::class, $response->result);
-        $this->assertCount(0, $response->result->tools);
+        $this->assertCount(1, $response->result->tools);
+        $this->assertSame('public_tool', $response->result->tools[0]->name);
     }
 
-    public function testReturnsEmptyListWithNullToken()
+    public function testProtectedToolsHiddenFromUnauthorizedUsers(): void
     {
+        $tool = new Tool('protected_tool', ['type' => 'object', 'properties' => [], 'required' => null], null, null);
+        $ref = new ToolReference($tool, [self::class, 'dummyAllowed']);
+
         $registry = $this->createStub(RegistryInterface::class);
-        $registry->method('getTools')->willReturn(new Page([], null));
+        $registry->method('getTools')->willReturn(new Page([$tool], null));
+        $registry->method('getTool')->willReturn($ref);
 
-        $tokenStorage = $this->createStub(TokenStorageInterface::class);
-        $tokenStorage->method('getToken')->willReturn(new NullToken());
+        $checker = $this->createStub(IsGrantedCheckerInterface::class);
+        $checker->method('isGranted')->willReturn(false);
 
-        $handler = new FilteredListToolsHandler($registry, $this->createStub(IsGrantedCheckerInterface::class), $tokenStorage);
+        $handler = new FilteredListToolsHandler($registry, $checker);
         $response = $handler->handle((new ListToolsRequest())->withId('1'), $this->createStub(SessionInterface::class));
 
         $this->assertCount(0, $response->result->tools);
     }
 
-    public function testFiltersToolsByAuthorizationWhenAuthenticated()
+    public function testFiltersToolsByAuthorization(): void
     {
         $allowedTool = new Tool('allowed', ['type' => 'object', 'properties' => [], 'required' => null], null, null);
         $deniedTool = new Tool('denied', ['type' => 'object', 'properties' => [], 'required' => null], null, null);
@@ -90,19 +95,14 @@ final class FilteredListToolsHandlerTest extends TestCase
             static fn (array $handler) => 'dummyAllowed' === $handler[1]
         );
 
-        $tokenStorage = $this->createStub(TokenStorageInterface::class);
-        $tokenStorage->method('getToken')->willReturn(
-            $this->createStub(PostAuthenticationToken::class)
-        );
-
-        $handler = new FilteredListToolsHandler($registry, $checker, $tokenStorage);
+        $handler = new FilteredListToolsHandler($registry, $checker);
         $response = $handler->handle((new ListToolsRequest())->withId('1'), $this->createStub(SessionInterface::class));
 
         $this->assertCount(1, $response->result->tools);
         $this->assertSame('allowed', $response->result->tools[0]->name);
     }
 
-    public function testDeniesToolWithNonArrayHandler()
+    public function testAllowsToolWithNonArrayHandler(): void
     {
         $tool = new Tool('closure_tool', ['type' => 'object', 'properties' => [], 'required' => null], null, null);
         $ref = new ToolReference($tool, static fn () => null);
@@ -111,15 +111,11 @@ final class FilteredListToolsHandlerTest extends TestCase
         $registry->method('getTools')->willReturn(new Page([$tool], null));
         $registry->method('getTool')->willReturn($ref);
 
-        $tokenStorage = $this->createStub(TokenStorageInterface::class);
-        $tokenStorage->method('getToken')->willReturn(
-            $this->createStub(PostAuthenticationToken::class)
-        );
-
-        $handler = new FilteredListToolsHandler($registry, $this->createStub(IsGrantedCheckerInterface::class), $tokenStorage);
+        $handler = new FilteredListToolsHandler($registry, $this->createStub(IsGrantedCheckerInterface::class));
         $response = $handler->handle((new ListToolsRequest())->withId('1'), $this->createStub(SessionInterface::class));
 
-        $this->assertCount(0, $response->result->tools);
+        $this->assertCount(1, $response->result->tools);
+        $this->assertSame('closure_tool', $response->result->tools[0]->name);
     }
 
     public static function dummyAllowed(): void
