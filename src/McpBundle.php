@@ -22,7 +22,6 @@ use Mcp\Server\Handler\Request\RequestHandlerInterface;
 use Mcp\Server\Session\FileSessionStore;
 use Mcp\Server\Session\InMemorySessionStore;
 use Mcp\Server\Session\Psr16SessionStore;
-use Psr\Http\Server\MiddlewareInterface;
 use Symfony\AI\McpBundle\Command\McpCommand;
 use Symfony\AI\McpBundle\Controller\McpController;
 use Symfony\AI\McpBundle\DependencyInjection\McpPass;
@@ -76,9 +75,6 @@ final class McpBundle extends AbstractBundle
 
         $builder->registerForAutoconfiguration(NotificationHandlerInterface::class)
             ->addTag('mcp.notification_handler');
-
-        $builder->registerForAutoconfiguration(MiddlewareInterface::class)
-            ->addTag('mcp.middleware');
 
         if ($builder->getParameter('kernel.debug')) {
             $traceableRegistry = (new Definition('mcp.traceable_registry'))
